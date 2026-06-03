@@ -27,7 +27,7 @@ export default function ProfileSelectUI() {
     await switchProfile(profileId);
     const profile = profiles.find(p => p.id === profileId);
     if (profile) await ensureWorldCupSeedCampaign(profile.id);
-    router.replace('/campaigns');
+    router.replace('/arc');
   }
 
   async function handleCreate() {
@@ -35,7 +35,7 @@ export default function ProfileSelectUI() {
     setSaving(true);
     const profile = await createProfile(name.trim(), role.trim() || undefined, true);
     await ensureWorldCupSeedCampaign(profile.id);
-    router.replace('/campaigns');
+    router.replace('/arc');
   }
 
   if (loading) return (

@@ -6,10 +6,10 @@ export default function Home() {
 
   useEffect(() => {
     async function boot() {
-      const { getActiveProfile } = await import('../lib/profile');
       const { runFullSeed } = await import('../lib/seed');
+      const { getActiveProfile } = await import('../lib/profile');
 
-      // Run seed (idempotent — safe every boot)
+      // Seed is idempotent — safe every boot
       await runFullSeed();
 
       const profile = await getActiveProfile();
@@ -21,7 +21,7 @@ export default function Home() {
       // PIN session check — sessionStorage clears on tab close
       const authed = sessionStorage.getItem('arcmaker_authed');
       if (authed === '1') {
-        router.replace('/campaigns');
+        router.replace('/arc');
       } else {
         router.replace('/pin');
       }

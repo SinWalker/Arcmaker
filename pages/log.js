@@ -1,8 +1,3 @@
-// Legacy route — redirects to sessions list
-import { useEffect } from 'react';
-import { useRouter } from 'next/router';
-export default function LogRedirect() {
-  const router = useRouter();
-  useEffect(() => { router.replace('/sessions'); }, []);
-  return null;
-}
+import dynamic from 'next/dynamic';
+const LogUI = dynamic(() => import('../components/log/LogUI'), { ssr: false });
+export default function LogPage() { return <LogUI />; }

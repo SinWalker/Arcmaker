@@ -1,13 +1,8 @@
-import dynamic from 'next/dynamic';
-import Head from 'next/head';
-
-const SessionsListUI = dynamic(() => import('../../components/sessions/SessionsListUI'), { ssr: false });
-
-export default function SessionsPage() {
-  return (
-    <>
-      <Head><title>Sessions — ArcMaker</title></Head>
-      <SessionsListUI />
-    </>
-  );
+// Legacy redirect → /field
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
+export default function SessionsRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/field'); }, []);
+  return null;
 }

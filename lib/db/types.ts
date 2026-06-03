@@ -100,6 +100,7 @@ export interface Assignment extends BaseRecord {
   backupLocation?: string;
   dayType?: 'shoot' | 'edit' | 'publish' | 'outreach' | 'recovery' | 'scout' | 'tentpole';
   weekNumber?: number;
+  completedSuccessConditions?: string[];  // indexes of checked conditions e.g. ["0","2"]
 }
 
 // ─── FieldSession ────────────────────────────────────────────────────────────

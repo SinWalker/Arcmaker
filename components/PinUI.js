@@ -43,7 +43,7 @@ export default function PinUI() {
         await switchProfile(profile.id);
       }
       sessionStorage.setItem('arcmaker_authed', '1');
-      router.replace('/campaigns');
+      router.replace('/arc');
     } else {
       // Wrong PIN — shake and clear
       setShake(true);

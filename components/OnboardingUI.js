@@ -18,7 +18,7 @@ export default function OnboardingUI() {
       const { ensureWorldCupSeedCampaign } = await import('../lib/seed');
       const profile = await createProfile(name.trim(), role.trim() || undefined, true);
       await ensureWorldCupSeedCampaign(profile.id);
-      router.replace('/campaigns');
+      router.replace('/arc');
     } catch (e) {
       setError(e.message);
       setSaving(false);

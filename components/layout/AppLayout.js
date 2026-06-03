@@ -2,44 +2,38 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 const NAV = [
-  { href: '/campaigns', icon: '⬡',  label: 'Arc' },
-  { href: '/calendar',  icon: '📅', label: 'Mission' },
-  { href: '/today',     icon: '●',  label: 'Today' },
-  { href: '/sessions',  icon: '🎥', label: 'Sessions' },
-  { href: '/settings',  icon: '⚙',  label: 'Settings' },
+  { href: '/arc',   label: 'ARC' },
+  { href: '/ops',   label: 'OPS' },
+  { href: '/cal',   label: 'CAL' },
+  { href: '/field', label: 'FIELD' },
+  { href: '/log',   label: 'LOG' },
 ];
 
-export default function AppLayout({ children, title }) {
+export default function AppLayout({ children, sysLabel, pageTitle }) {
   const router = useRouter();
-
-  // Back button shows on all pages except top-level nav roots
-  const isNavRoot = NAV.some(n => router.pathname === n.href);
 
   return (
     <>
-      {title && (
-        <div style={{ background: '#111', borderBottom: '1px solid #2A2A2A', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {!isNavRoot && (
-            <button
-              onClick={() => router.back()}
-              style={{ background: 'none', border: 'none', color: '#C9A84C', fontSize: 18, cursor: 'pointer', padding: 0, marginRight: 4 }}
-            >‹</button>
-          )}
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#F0F0F0' }}>{title}</span>
-        </div>
-      )}
       <div className="screen">
         <div className="page-content">
+          {/* System Header */}
+          <div className="sys-header">
+            <div className="sys-label">{sysLabel || 'STORY OPERATIONS SYSTEM'}</div>
+            <div className="sys-logo">{pageTitle || 'ARCMAKER'}</div>
+          </div>
           {children}
         </div>
       </div>
+
+      {/* Bottom Nav */}
       <nav className="bottom-nav">
-        {NAV.map(({ href, icon, label }) => {
-          const active = router.pathname === href || router.pathname.startsWith(href + '/');
+        {NAV.map(({ href, label }) => {
+          const active =
+            router.pathname === href ||
+            router.pathname.startsWith(href + '/');
           return (
             <Link key={href} href={href} className={`nav-tab${active ? ' active' : ''}`}>
-              <span className="icon">{icon}</span>
-              <span className="label">{label}</span>
+              {label}
             </Link>
           );
         })}

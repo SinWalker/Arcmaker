@@ -1,13 +1,8 @@
-import dynamic from 'next/dynamic';
-import Head from 'next/head';
-
-const TodayUI = dynamic(() => import('../components/today/TodayUI'), { ssr: false });
-
-export default function TodayPage() {
-  return (
-    <>
-      <Head><title>Today — ArcMaker</title></Head>
-      <TodayUI />
-    </>
-  );
+// Legacy redirect → /cal (TODAY is inside CAL day view)
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
+export default function TodayRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/cal'); }, []);
+  return null;
 }
