@@ -14,7 +14,8 @@ export default function Home() {
 
       const profile = await getActiveProfile();
       if (!profile) {
-        router.replace('/onboarding');
+        // LocalProfileAccessUI at /pin handles no-profile state — it runs seed again.
+        router.replace('/pin');
         return;
       }
 
