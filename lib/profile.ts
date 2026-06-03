@@ -117,13 +117,24 @@ export async function getOwnershipFields(): Promise<{
   createdByProfileId: string;
   userId: undefined;
 }> {
-  const profile = await getActiveProfile();
+  let profile = await getActiveProfile();
+
   if (!profile) {
-    throw new Error(
-      '[ArcMaker] No active profile found. ' +
-      'A profile must be selected before creating records.'
-    );
+    // Safety net: if no active profile (e.g. PIN screen missed the activation step),
+    // auto-activate the first available profile rather than throwing and losing data.
+    // This can happen on fresh install before the first PIN entry completes.
+    const all = await getAllProfiles();
+    if (all.length > 0) {
+      await switchProfile(all[0].id);
+      profile = { ...all[0], isActive: true };
+      console.warn('[ArcMaker] getOwnershipFields: no active profile — auto-activated first profile:', profile.displayName);
+    } else {
+      throw new Error(
+        '[ArcMaker] No profiles found. Run seed first.'
+      );
+    }
   }
+
   return {
     createdByProfileId: profile.id,
     userId: undefined, // V1 — reserved for future Supabase Auth

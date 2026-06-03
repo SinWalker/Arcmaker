@@ -38,7 +38,10 @@ export default function LocalProfileAccessUI() {
         getAllProfiles(),
       ]);
 
-      setProfile(active || null);
+      // BUG FIX: On fresh install, seed creates Sin with isActive:false.
+      // getActiveProfile() returns undefined. Fall back to allProfiles[0]
+      // so validate() has a profile object and can call switchProfile() properly.
+      setProfile(active || all[0] || null);
       setAllProfiles(all || []);
 
       const c = await getActiveCampaign();
