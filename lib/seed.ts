@@ -94,6 +94,56 @@ export async function seedWorldCupCampaignIfNeeded(profileId: string): Promise<{
   };
 }
 
+// ─── Seed repair ─────────────────────────────────────────────────────────────
+// Finds the existing World Cup campaign and patches any missing fields.
+// Never overwrites a field that already has a value.
+// Safe to call on every app boot.
+
+export async function ensureWorldCupSeedCampaign(profileId: string): Promise<Campaign> {
+  const db = getDB();
+  const seed = buildWorldCupSeedCampaign(profileId);
+
+  // Find by flag or title
+  const all = await db.campaigns.toArray();
+  const existing = all.find(
+    (c) => c.isSeedCampaign === true || c.title.includes('World Cup Arc')
+  );
+
+  if (!existing) {
+    await db.campaigns.add(seed);
+    return seed;
+  }
+
+  // Patch only empty/null/undefined fields
+  const patch: Partial<Campaign> = {};
+  const fields: (keyof Campaign)[] = [
+    'title', 'status', 'description', 'mission', 'storyQuestion',
+    'theme', 'successCriteria', 'targetCharacterTypes',
+    'startDate', 'endDate', 'source', 'isSeedCampaign',
+    'createdByProfileId',
+  ];
+
+  for (const field of fields) {
+    const current = existing[field];
+    const isEmpty =
+      current === undefined ||
+      current === null ||
+      current === '' ||
+      (Array.isArray(current) && current.length === 0);
+    if (isEmpty) {
+      (patch as Record<string, unknown>)[field] = seed[field];
+    }
+  }
+
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = now();
+    patch.updatedByProfileId = profileId;
+    await db.campaigns.update(existing.id, patch);
+  }
+
+  return { ...existing, ...patch };
+}
+
 // ─── Delete protection ────────────────────────────────────────────────────────
 // Call this before any campaign delete operation.
 // Returns true if delete should proceed, false if it should be blocked.

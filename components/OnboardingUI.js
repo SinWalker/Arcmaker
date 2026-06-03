@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { createProfile } from '../lib/profile';
-import { seedWorldCupCampaignIfNeeded } from '../lib/seed';
 
 const ROLES = ['Director', 'DP', 'Second Shooter', 'Producer', 'Editor'];
 
@@ -16,8 +15,9 @@ export default function OnboardingUI() {
     if (!name.trim()) { setError('Enter your name to continue.'); return; }
     setSaving(true);
     try {
+      const { ensureWorldCupSeedCampaign } = await import('../lib/seed');
       const profile = await createProfile(name.trim(), role.trim() || undefined, true);
-      await seedWorldCupCampaignIfNeeded(profile.id);
+      await ensureWorldCupSeedCampaign(profile.id);
       router.replace('/campaigns');
     } catch (e) {
       setError(e.message);
