@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { getAllCampaigns } from '../../lib/campaign';
-import { getActiveProfile, deactivateProfile } from '../../lib/profile';
+import { getActiveProfile } from '../../lib/profile';
 
 const STATUS_LABEL = { active: 'Active', archived: 'Archived', template: 'Template' };
 const STATUS_COLOR = { active: '#27AE60', archived: '#555', template: '#5B9BD5' };
@@ -11,11 +11,6 @@ export default function CampaignLauncherUI() {
   const [profile, setProfile] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  async function handleLogout() {
-    if (profile) await deactivateProfile(profile.id);
-    router.replace('/profile-select');
-  }
 
   useEffect(() => {
     async function load() {
@@ -54,12 +49,6 @@ export default function CampaignLauncherUI() {
                 <div style={{ fontSize: 13, fontWeight: 700 }}>{profile.displayName}</div>
                 {profile.role && <div style={{ fontSize: 11, color: '#888' }}>{profile.role}</div>}
               </div>
-              <button
-                onClick={handleLogout}
-                style={{ background: 'none', border: '1px solid #2A2A2A', borderRadius: 6, color: '#555', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '4px 10px', marginLeft: 4 }}
-              >
-                Switch
-              </button>
             </div>
           )}
         </div>

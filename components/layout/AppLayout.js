@@ -2,20 +2,24 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 
 const NAV = [
-  { href: '/dashboard', icon: '⬡', label: 'Arc' },
+  { href: '/campaigns', icon: '⬡',  label: 'Arc' },
   { href: '/calendar',  icon: '📅', label: 'Mission' },
   { href: '/today',     icon: '●',  label: 'Today' },
   { href: '/sessions',  icon: '🎥', label: 'Sessions' },
+  { href: '/settings',  icon: '⚙',  label: 'Settings' },
 ];
 
 export default function AppLayout({ children, title }) {
   const router = useRouter();
 
+  // Back button shows on all pages except top-level nav roots
+  const isNavRoot = NAV.some(n => router.pathname === n.href);
+
   return (
     <>
       {title && (
         <div style={{ background: '#111', borderBottom: '1px solid #2A2A2A', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {router.pathname !== '/dashboard' && (
+          {!isNavRoot && (
             <button
               onClick={() => router.back()}
               style={{ background: 'none', border: 'none', color: '#C9A84C', fontSize: 18, cursor: 'pointer', padding: 0, marginRight: 4 }}

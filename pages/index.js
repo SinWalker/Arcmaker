@@ -5,9 +5,12 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    async function route() {
+    async function boot() {
       const { getActiveProfile } = await import('../lib/profile');
-      const { ensureWorldCupSeedCampaign } = await import('../lib/seed');
+      const { runFullSeed } = await import('../lib/seed');
+
+      // Run seed (idempotent — safe every boot)
+      await runFullSeed();
 
       const profile = await getActiveProfile();
       if (!profile) {
@@ -15,11 +18,15 @@ export default function Home() {
         return;
       }
 
-      // Always repair seed campaign before entering app
-      await ensureWorldCupSeedCampaign(profile.id);
-      router.replace('/campaigns');
+      // PIN session check — sessionStorage clears on tab close
+      const authed = sessionStorage.getItem('arcmaker_authed');
+      if (authed === '1') {
+        router.replace('/campaigns');
+      } else {
+        router.replace('/pin');
+      }
     }
-    route();
+    boot();
   }, []);
 
   return null;

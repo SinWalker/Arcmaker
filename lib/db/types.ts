@@ -41,6 +41,7 @@ export interface UserProfile {
   id: string;           // UUID — globally unique for future sync
   displayName: string;  // "Sin", "Sinclair", "Second Shooter"
   role?: string;        // "Director", "Media Partner", "Second Shooter"
+  pin?: string;         // local PIN — not auth, just identity confirmation (4 digits)
   createdAt: string;    // ISO timestamp
   updatedAt: string;
   isActive: boolean;    // only one profile may be active at a time
@@ -53,6 +54,7 @@ export interface Campaign extends OwnedRecord {
   title: string;
   status: CampaignStatus;
   description?: string;
+  primaryLocations?: string[];  // top-level location list for the campaign
   // CampaignBrief fields — live directly on Campaign (no separate object)
   mission?: string;
   storyQuestion?: string;
@@ -80,12 +82,24 @@ export interface CampaignEvent extends BaseRecord {
 // ─── Assignment ──────────────────────────────────────────────────────────────
 
 export interface Assignment extends BaseRecord {
-  eventId?: string;     // nullable — assignment can exist without a specific event
+  eventId?: string;           // nullable — assignment can exist without a specific event
   title: string;
   storyQuestion?: string;
   status: AssignmentStatus;
-  date?: string;        // YYYY-MM-DD
-  location?: string;
+  date?: string;              // YYYY-MM-DD
+  location?: string;          // legacy single-location field
+  // Field producer mission fields
+  missionTitle?: string;      // short mission name (e.g. "Dallas Wakes Up")
+  objective?: string;         // the main story / editorial objective for this day
+  successConditions?: string[];
+  requiredShots?: string[];
+  targetCharacters?: string[];
+  businessOpportunities?: string[];
+  contentDeliverables?: string[];   // shorts, reels, YouTube episode
+  primaryLocation?: string;
+  backupLocation?: string;
+  dayType?: 'shoot' | 'edit' | 'publish' | 'outreach' | 'recovery' | 'scout' | 'tentpole';
+  weekNumber?: number;
 }
 
 // ─── FieldSession ────────────────────────────────────────────────────────────
