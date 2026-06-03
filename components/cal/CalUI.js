@@ -1,198 +1,383 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import AppLayout from '../layout/AppLayout';
 import { getActiveCampaign } from '../../lib/campaign';
-import { getAssignmentsForCampaign } from '../../lib/assignment';
-import { updateAssignment } from '../../lib/assignment';
+import { getAssignmentsForCampaign, createAssignment, updateAssignment } from '../../lib/assignment';
 import { createSession } from '../../lib/session';
 
-const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-const WEEKDAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const MONTHS     = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const WEEKDAYS   = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const DAY_TYPES = [
+  { value: 'shoot',    label: 'SHOOT' },
+  { value: 'tentpole', label: 'TENTPOLE' },
+  { value: 'edit',     label: 'EDIT' },
+  { value: 'publish',  label: 'PUBLISH' },
+  { value: 'outreach', label: 'OUTREACH' },
+  { value: 'recovery', label: 'RECOVERY' },
+  { value: 'off',      label: 'OFF' },
+];
+
+// Colors per day type — must match globals.css
+const DAY_TYPE_COLORS = {
+  shoot:    { border: '#aaff42', text: '#aaff42' },
+  tentpole: { border: '#34d7ff', text: '#34d7ff' },
+  edit:     { border: '#7ea6c7', text: '#7ea6c7' },
+  publish:  { border: '#c8ff57', text: '#c8ff57' },
+  outreach: { border: '#ffb347', text: '#ffb347' },
+  recovery: { border: '#4a5568', text: '#7ea6c7' },
+  off:      { border: '#2e4768', text: '#3d5a75' },
+};
 
 function toYMD(d) {
   return d.toISOString().slice(0, 10);
 }
 
-function parseLocalDate(ymd) {
+function formatDateLabel(ymd) {
+  if (!ymd) return '';
   const [y, m, d] = ymd.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  const date = new Date(y, m - 1, d);
+  return `${MONTHS[date.getMonth()]} ${d} // ${date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()}`;
 }
 
 function getDayTypeClass(dayType) {
   if (!dayType) return '';
-  if (dayType === 'tentpole') return 'tentpole';
-  if (dayType === 'shoot') return 'shoot';
-  if (dayType === 'edit') return 'edit';
-  if (dayType === 'publish') return 'publish';
-  return '';
+  const valid = ['shoot','tentpole','edit','publish','outreach','recovery','off'];
+  return valid.includes(dayType) ? dayType : '';
 }
 
-// ── Day View Modal ──────────────────────────────────────────────────────────
+// ── Day Editor Modal ─────────────────────────────────────────────────────────
 
-function DayViewModal({ assignment, onClose, onStartSession, onToggleCondition }) {
-  if (!assignment) return null;
+const SAVE_STATUS = {
+  idle:    { label: '', color: 'var(--muted)' },
+  saved:   { label: 'SAVED', color: 'var(--green)' },
+  saving:  { label: 'SAVING...', color: 'var(--muted)' },
+  unsaved: { label: 'UNSAVED', color: 'var(--cyan)' },
+  error:   { label: 'SAVE FAILED', color: 'var(--red)' },
+};
 
-  const conditions = assignment.successConditions || [];
-  const completed = assignment.completedSuccessConditions || [];
+function DayEditorModal({ ymd, existingAssignment, campaign, onClose, onSaved, onStartSession }) {
+  const isNew = !existingAssignment;
+
+  const [fields, setFields] = useState({
+    missionTitle:        existingAssignment?.missionTitle || existingAssignment?.title || '',
+    dayType:             existingAssignment?.dayType || '',
+    objective:           existingAssignment?.objective || '',
+    primaryLocation:     existingAssignment?.primaryLocation || '',
+    backupLocation:      existingAssignment?.backupLocation || '',
+    successConditionsText: (existingAssignment?.successConditions || []).join('\n'),
+    requiredShotsText:   (existingAssignment?.requiredShots || []).join('\n'),
+    targetCharactersText:(existingAssignment?.targetCharacters || []).join('\n'),
+    deliverablesText:    (existingAssignment?.contentDeliverables || []).join('\n'),
+    notes:               existingAssignment?.notes || '',
+  });
+
+  const [saveStatus, setSaveStatus] = useState('idle');
+  const [savedAssignment, setSavedAssignment] = useState(existingAssignment || null);
+  const [starting, setStarting] = useState(false);
+  const debounceRef = useRef(null);
+
+  // Fields → structured data
+  function buildPatch(f) {
+    return {
+      missionTitle:        f.missionTitle.trim() || undefined,
+      dayType:             f.dayType || undefined,
+      objective:           f.objective.trim() || undefined,
+      primaryLocation:     f.primaryLocation.trim() || undefined,
+      backupLocation:      f.backupLocation.trim() || undefined,
+      successConditions:   f.successConditionsText ? f.successConditionsText.split('\n').map(s => s.trim()).filter(Boolean) : [],
+      requiredShots:       f.requiredShotsText ? f.requiredShotsText.split('\n').map(s => s.trim()).filter(Boolean) : [],
+      targetCharacters:    f.targetCharactersText ? f.targetCharactersText.split('\n').map(s => s.trim()).filter(Boolean) : [],
+      contentDeliverables: f.deliverablesText ? f.deliverablesText.split('\n').map(s => s.trim()).filter(Boolean) : [],
+      notes:               f.notes.trim() || undefined,
+    };
+  }
+
+  function handleChange(key, value) {
+    setFields(prev => {
+      const next = { ...prev, [key]: value };
+      return next;
+    });
+    setSaveStatus('unsaved');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => triggerSave(), 1200);
+  }
+
+  function setDayType(type) {
+    setFields(prev => ({ ...prev, dayType: type }));
+    setSaveStatus('unsaved');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => triggerSave(), 800);
+  }
+
+  const latestFields = useRef(fields);
+  latestFields.current = fields;
+  const savedAssignmentRef = useRef(savedAssignment);
+  savedAssignmentRef.current = savedAssignment;
+
+  async function triggerSave() {
+    const f = latestFields.current;
+    const existing = savedAssignmentRef.current;
+    setSaveStatus('saving');
+    try {
+      const patch = buildPatch(f);
+      let result;
+      if (existing) {
+        result = await updateAssignment(existing.id, patch);
+      } else {
+        // Create with minimum required fields, then patch
+        const created = await createAssignment(campaign.id, {
+          title: f.missionTitle.trim() || `Day ${ymd}`,
+          date: ymd,
+        });
+        result = await updateAssignment(created.id, patch);
+      }
+      setSavedAssignment(result);
+      savedAssignmentRef.current = result;
+      setSaveStatus('saved');
+      onSaved(result);
+    } catch (e) {
+      setSaveStatus('error');
+    }
+  }
+
+  async function handleSave() {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    await triggerSave();
+  }
+
+  async function handleStartSession() {
+    if (!campaign || starting) return;
+    setStarting(true);
+    // Save first
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    await triggerSave();
+    const assignment = savedAssignmentRef.current;
+    if (!assignment) { setStarting(false); return; }
+    try {
+      const title = assignment.missionTitle || assignment.title || 'Field Session';
+      await createSession(campaign.id, assignment.id, title, assignment.primaryLocation || undefined);
+      onStartSession();
+    } catch {
+      setStarting(false);
+    }
+  }
+
+  const canStartSession = ['shoot','tentpole'].includes(fields.dayType);
+  const sc = SAVE_STATUS[saveStatus];
+  const colorToken = DAY_TYPE_COLORS[fields.dayType];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxHeight: '85vh', overflowY: 'auto' }}>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-          <div className="modal-title">
-            {assignment.date ? `${MONTHS[parseInt(assignment.date.split('-')[1])-1]} ${parseInt(assignment.date.split('-')[2])}` : 'MISSION PACKET'}
+      <div
+        className="modal-box"
+        onClick={e => e.stopPropagation()}
+        style={{ maxHeight: '92vh', overflowY: 'auto' }}
+      >
+        {/* Header row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <div className="modal-title" style={{ marginBottom: 2 }}>{formatDateLabel(ymd)}</div>
+            {isNew && !savedAssignment && (
+              <div style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#2e4768' }}>
+                NEW DAY — NOT YET SAVED
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer', padding: 0, lineHeight: 1 }}
+            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 22, cursor: 'pointer', padding: '0 0 0 8px', lineHeight: 1 }}
           >×</button>
         </div>
 
-        {/* Mission title */}
-        <div className="win-title" style={{ marginBottom: 6 }}>
-          {(assignment.missionTitle || assignment.title || 'MISSION').toUpperCase()}
+        {/* Save status + save button */}
+        <div className="save-row" style={{ marginBottom: 14 }}>
+          <div className="save-status-text" style={{ color: sc.color }}>{sc.label}</div>
+          <button
+            className={`save-btn${saveStatus === 'unsaved' || saveStatus === 'error' ? ' unsaved' : ''}`}
+            onClick={handleSave}
+            disabled={saveStatus === 'saving' || saveStatus === 'saved' || saveStatus === 'idle'}
+          >
+            SAVE
+          </button>
         </div>
-        {assignment.dayType && (
-          <span className={`chip ${getDayTypeClass(assignment.dayType)}`} style={{ marginTop: 0 }}>
-            {assignment.dayType.toUpperCase()}
-          </span>
-        )}
+
+        {/* Day type selector */}
+        <div style={{ marginBottom: 14 }}>
+          <div className="field-label">DAY TYPE</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {DAY_TYPES.map(({ value, label }) => {
+              const active = fields.dayType === value;
+              const col = DAY_TYPE_COLORS[value];
+              return (
+                <button
+                  key={value}
+                  onClick={() => setDayType(value)}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    fontFamily: "'Oxanium', sans-serif",
+                    border: `2px solid ${active ? col.border : '#2e4768'}`,
+                    background: active ? col.border + '22' : '#0f1523',
+                    color: active ? col.text : '#7ea6c7',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Mission Title */}
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">MISSION TITLE</div>
+          <input
+            className="sys-input"
+            value={fields.missionTitle}
+            onChange={e => handleChange('missionTitle', e.target.value)}
+            placeholder="What are you doing today?"
+            style={{ marginTop: 4 }}
+          />
+        </div>
 
         {/* Objective */}
-        {assignment.objective && (
-          <div className="objective-box" style={{ marginTop: 12 }}>
-            <div className="field-label">OBJECTIVE</div>
-            <div className="copy-text" style={{ marginTop: 4 }}>{assignment.objective}</div>
-          </div>
-        )}
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">OBJECTIVE</div>
+          <textarea
+            className="sys-textarea"
+            value={fields.objective}
+            onChange={e => handleChange('objective', e.target.value)}
+            placeholder="What does success look like?"
+            rows={2}
+            style={{ marginTop: 4 }}
+          />
+        </div>
 
-        {/* Success Conditions — interactive checkboxes */}
-        {conditions.length > 0 && (
-          <div className="window" style={{ marginTop: 14 }}>
-            <div className="window-title-tab">SUCCESS CONDITIONS</div>
-            <div className="window-inner">
-              {conditions.map((cond, i) => {
-                const key = String(i);
-                const done = completed.includes(key);
-                return (
-                  <div
-                    key={i}
-                    className="check-item"
-                    onClick={() => onToggleCondition(assignment, key)}
-                  >
-                    <div className={`check-box${done ? ' done' : ''}`}>{done ? '✓' : ''}</div>
-                    <div className={`check-text${done ? ' done' : ''}`}>{cond}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* Primary Location */}
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">PRIMARY LOCATION</div>
+          <input
+            className="sys-input"
+            value={fields.primaryLocation}
+            onChange={e => handleChange('primaryLocation', e.target.value)}
+            placeholder="e.g. Fair Park, Deep Ellum"
+            style={{ marginTop: 4 }}
+          />
+        </div>
 
-        {/* Location */}
-        {assignment.primaryLocation && (
-          <div className="window" style={{ marginTop: 14 }}>
-            <div className="window-title-tab">LOCATION</div>
-            <div className="window-inner">
-              <div className="dashed-item" style={{ paddingTop: 0 }}>
-                <span className="dashed-item-label">PRIMARY</span>
-                {assignment.primaryLocation}
-              </div>
-              {assignment.backupLocation && (
-                <div className="dashed-item">
-                  <span className="dashed-item-label">BACKUP</span>
-                  {assignment.backupLocation}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Success Conditions */}
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">SUCCESS CONDITIONS  (one per line)</div>
+          <textarea
+            className="sys-textarea"
+            value={fields.successConditionsText}
+            onChange={e => handleChange('successConditionsText', e.target.value)}
+            placeholder={"Capture 3 characters\nGet B-roll of main stage"}
+            rows={3}
+            style={{ marginTop: 4 }}
+          />
+        </div>
 
         {/* Required Shots */}
-        {assignment.requiredShots?.length > 0 && (
-          <div className="window" style={{ marginTop: 14 }}>
-            <div className="window-title-tab">REQUIRED SHOTS</div>
-            <div className="window-inner">
-              {assignment.requiredShots.map((s, i) => (
-                <div key={i} className="dashed-item" style={{ paddingTop: i === 0 ? 0 : undefined }}>
-                  {s}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">REQUIRED SHOTS  (one per line)</div>
+          <textarea
+            className="sys-textarea"
+            value={fields.requiredShotsText}
+            onChange={e => handleChange('requiredShotsText', e.target.value)}
+            placeholder={"Wide establishing shot\nCharacter close-up"}
+            rows={3}
+            style={{ marginTop: 4 }}
+          />
+        </div>
 
         {/* Target Characters */}
-        {assignment.targetCharacters?.length > 0 && (
-          <div className="window" style={{ marginTop: 14 }}>
-            <div className="window-title-tab">TARGET CHARACTERS</div>
-            <div className="window-inner">
-              {assignment.targetCharacters.map((c, i) => (
-                <div key={i} className="dashed-item" style={{ paddingTop: i === 0 ? 0 : undefined }}>{c}</div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Business Opportunities */}
-        {assignment.businessOpportunities?.length > 0 && (
-          <div className="window" style={{ marginTop: 14 }}>
-            <div className="window-title-tab">BUSINESS OPS</div>
-            <div className="window-inner">
-              {assignment.businessOpportunities.map((b, i) => (
-                <div key={i} className="dashed-item" style={{ paddingTop: i === 0 ? 0 : undefined }}>{b}</div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">TARGET CHARACTERS  (one per line)</div>
+          <textarea
+            className="sys-textarea"
+            value={fields.targetCharactersText}
+            onChange={e => handleChange('targetCharactersText', e.target.value)}
+            placeholder={"Local vendor\nInternational fan"}
+            rows={2}
+            style={{ marginTop: 4 }}
+          />
+        </div>
 
         {/* Content Deliverables */}
-        {assignment.contentDeliverables?.length > 0 && (
-          <div className="window" style={{ marginTop: 14 }}>
-            <div className="window-title-tab">DELIVERABLES</div>
-            <div className="window-inner">
-              {assignment.contentDeliverables.map((d, i) => (
-                <div key={i} className="dashed-item" style={{ paddingTop: i === 0 ? 0 : undefined }}>{d}</div>
-              ))}
-            </div>
-          </div>
+        <div style={{ marginBottom: 12 }}>
+          <div className="field-label">CONTENT DELIVERABLES  (one per line)</div>
+          <textarea
+            className="sys-textarea"
+            value={fields.deliverablesText}
+            onChange={e => handleChange('deliverablesText', e.target.value)}
+            placeholder={"1x Instagram reel\n3x character clips"}
+            rows={2}
+            style={{ marginTop: 4 }}
+          />
+        </div>
+
+        {/* Notes */}
+        <div style={{ marginBottom: 16 }}>
+          <div className="field-label">NOTES</div>
+          <textarea
+            className="sys-textarea"
+            value={fields.notes}
+            onChange={e => handleChange('notes', e.target.value)}
+            placeholder="Anything else for this day..."
+            rows={2}
+            style={{ marginTop: 4 }}
+          />
+        </div>
+
+        {/* START FIELD SESSION — only for shoot / tentpole */}
+        {canStartSession && (
+          <button
+            className="cta-btn"
+            onClick={handleStartSession}
+            disabled={starting}
+            style={{ marginTop: 4 }}
+          >
+            {starting ? 'STARTING...' : 'START FIELD SESSION →'}
+          </button>
         )}
 
-        {/* Start Field Session */}
-        <button
-          className="cta-btn"
-          style={{ marginTop: 16 }}
-          onClick={() => onStartSession(assignment)}
-        >
-          START FIELD SESSION →
+        <button className="cta-btn ghost" onClick={onClose} style={{ marginTop: canStartSession ? 8 : 14 }}>
+          CLOSE
         </button>
-        <button className="cta-btn ghost" onClick={onClose}>CLOSE</button>
 
       </div>
     </div>
   );
 }
 
-// ── Main CAL ────────────────────────────────────────────────────────────────
+// ── Main CalUI ───────────────────────────────────────────────────────────────
 
 export default function CalUI() {
   const router = useRouter();
-  const [campaign, setCampaign] = useState(null);
+  const [campaign, setCampaign]       = useState(null);
   const [assignments, setAssignments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [editorYmd, setEditorYmd]     = useState(null);   // which day is open
 
-  const today = toYMD(new Date());
+  const today     = toYMD(new Date());
   const todayDate = new Date();
   const [viewMonth, setViewMonth] = useState(todayDate.getMonth());
-  const [viewYear, setViewYear] = useState(todayDate.getFullYear());
+  const [viewYear, setViewYear]   = useState(todayDate.getFullYear());
+
+  const campaignRef = useRef(null);
 
   useEffect(() => {
     async function load() {
       const c = await getActiveCampaign();
       setCampaign(c);
+      campaignRef.current = c;
       if (c) {
         const a = await getAssignmentsForCampaign(c.id);
         setAssignments(a);
@@ -202,16 +387,14 @@ export default function CalUI() {
     load();
   }, []);
 
-  // Map date → assignment
+  // date → assignment map (rebuilt on every render)
   const assignmentByDate = {};
-  assignments.forEach(a => {
-    if (a.date) assignmentByDate[a.date] = a;
-  });
+  assignments.forEach(a => { if (a.date) assignmentByDate[a.date] = a; });
 
   // Today's assignment
   const todayAssignment = assignmentByDate[today];
 
-  // This week (7 days starting today, filter only days with assignments)
+  // This week: next 14 days, up to 5 with assignments
   const weekDays = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(todayDate);
@@ -221,31 +404,35 @@ export default function CalUI() {
     if (weekDays.length >= 5) break;
   }
 
-  // Month grid
-  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  // Month grid cells
+  const firstDay    = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const calCells = [];
+  const calCells    = [];
   for (let i = 0; i < firstDay; i++) calCells.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const ymd = `${viewYear}-${String(viewMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     calCells.push({ day: d, ymd, assignment: assignmentByDate[ymd] });
   }
 
-  async function handleToggleCondition(assignment, key) {
-    const current = assignment.completedSuccessConditions || [];
-    const next = current.includes(key)
-      ? current.filter(k => k !== key)
-      : [...current, key];
-    const updated = await updateAssignment(assignment.id, { completedSuccessConditions: next });
-    setAssignments(prev => prev.map(a => a.id === assignment.id ? updated : a));
-    setSelectedAssignment(updated);
+  // Callback from DayEditorModal when an assignment is created or updated
+  function handleSaved(updatedAssignment) {
+    setAssignments(prev => {
+      const exists = prev.find(a => a.id === updatedAssignment.id);
+      if (exists) return prev.map(a => a.id === updatedAssignment.id ? updatedAssignment : a);
+      return [...prev, updatedAssignment];
+    });
   }
 
-  async function handleStartSession(assignment) {
-    if (!campaign) return;
-    const title = assignment.missionTitle || assignment.title || 'Field Session';
-    const session = await createSession(campaign.id, assignment.id, title, assignment.primaryLocation);
+  function handleStartSession() {
     router.push('/field');
+  }
+
+  function openEditor(ymd) {
+    setEditorYmd(ymd);
+  }
+
+  function closeEditor() {
+    setEditorYmd(null);
   }
 
   if (loading) return (
@@ -253,6 +440,8 @@ export default function CalUI() {
       <div style={{ color: 'var(--muted)', fontSize: 13, padding: '20px 0' }}>LOADING...</div>
     </AppLayout>
   );
+
+  const editorAssignment = editorYmd ? (assignmentByDate[editorYmd] || null) : null;
 
   return (
     <AppLayout sysLabel="MISSION BOARD" pageTitle="CAL">
@@ -264,22 +453,30 @@ export default function CalUI() {
           {todayAssignment ? (
             <>
               <div className="win-title">{(todayAssignment.missionTitle || todayAssignment.title || 'MISSION').toUpperCase()}</div>
-              <div className="copy-text">
-                {todayAssignment.primaryLocation && `${todayAssignment.primaryLocation}`}
-                {todayAssignment.objective && ` // ${todayAssignment.objective}`}
-              </div>
+              {todayAssignment.objective && (
+                <div className="copy-text" style={{ marginTop: 4 }}>{todayAssignment.objective}</div>
+              )}
               <button
                 className="chip"
-                style={{ cursor: 'pointer', border: 'none' }}
-                onClick={() => setSelectedAssignment(todayAssignment)}
+                style={{ cursor: 'pointer', border: 'none', marginTop: 10 }}
+                onClick={() => openEditor(today)}
               >
-                OPEN DAY
+                OPEN DAY EDITOR
               </button>
             </>
           ) : (
-            <div className="copy-text" style={{ color: 'var(--muted)' }}>
-              No mission scheduled for today.
-            </div>
+            <>
+              <div className="copy-text" style={{ color: 'var(--muted)' }}>
+                No mission scheduled for today.
+              </div>
+              <button
+                className="cta-btn ghost"
+                style={{ marginTop: 10 }}
+                onClick={() => openEditor(today)}
+              >
+                + CREATE TODAY'S MISSION
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -297,7 +494,7 @@ export default function CalUI() {
                 <div
                   key={date}
                   className={`day-card${assignment.dayType === 'tentpole' ? ' tentpole' : ''}`}
-                  onClick={() => setSelectedAssignment(assignment)}
+                  onClick={() => openEditor(date)}
                 >
                   <div className="date-box">
                     <div className="date-month">{mon}</div>
@@ -336,7 +533,7 @@ export default function CalUI() {
                 else setViewMonth(m => m - 1);
               }}
             >‹</button>
-            <div className="month-nav-label">{MONTH_FULL[viewMonth]} {viewYear}</div>
+            <div className="month-nav-label">{MONTH_FULL[viewMonth].toUpperCase()} {viewYear}</div>
             <button
               className="month-nav-btn"
               onClick={() => {
@@ -351,17 +548,18 @@ export default function CalUI() {
             {WEEKDAYS.map(w => <div key={w} className="cal-weekday">{w}</div>)}
           </div>
 
-          {/* Month grid */}
+          {/* Month grid — every non-null cell is clickable */}
           <div className="month-grid">
             {calCells.map((cell, i) => {
               if (!cell) return <div key={`e${i}`} className="cal-day empty" />;
               const isToday = cell.ymd === today;
-              const isPast = cell.ymd < today;
+              const isPast  = cell.ymd < today;
               const a = cell.assignment;
               let dayClass = 'cal-day';
-              if (isToday) dayClass += ' today';
-              else if (a) {
-                dayClass += ' ' + (getDayTypeClass(a.dayType) || 'shoot');
+              if (isToday) {
+                dayClass += ' today';
+              } else if (a?.dayType) {
+                dayClass += ' ' + getDayTypeClass(a.dayType);
                 if (isPast) dayClass += ' past';
               } else if (isPast) {
                 dayClass += ' past';
@@ -370,8 +568,8 @@ export default function CalUI() {
                 <div
                   key={cell.ymd}
                   className={dayClass}
-                  onClick={() => a && setSelectedAssignment(a)}
-                  title={a ? (a.missionTitle || a.title || '') : ''}
+                  onClick={() => openEditor(cell.ymd)}
+                  title={a ? (a.missionTitle || a.title || a.dayType || '') : 'Click to plan this day'}
                 >
                   {cell.day}
                 </div>
@@ -379,31 +577,36 @@ export default function CalUI() {
             })}
           </div>
 
-          {/* Legend */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-            {[
-              { cls: 'shoot', label: 'SHOOT' },
-              { cls: 'tentpole', label: 'TENTPOLE' },
-              { cls: 'edit', label: 'EDIT' },
-              { cls: 'publish', label: 'PUBLISH' },
-            ].map(({ cls, label }) => (
-              <div key={cls} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div className={`cal-day ${cls}`} style={{ width: 16, height: 16, minHeight: 0, fontSize: 8 }} />
-                <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>{label}</span>
-              </div>
-            ))}
+          {/* Legend — all 7 day types */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            {DAY_TYPES.map(({ value, label }) => {
+              const col = DAY_TYPE_COLORS[value];
+              return (
+                <div key={value} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div
+                    className={`cal-day ${value}`}
+                    style={{ width: 14, height: 14, minHeight: 0, fontSize: 0, padding: 0 }}
+                  />
+                  <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: col.text }}>
+                    {label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
         </div>
       </div>
 
-      {/* Day View Modal */}
-      {selectedAssignment && (
-        <DayViewModal
-          assignment={selectedAssignment}
-          onClose={() => setSelectedAssignment(null)}
+      {/* Day Editor Modal */}
+      {editorYmd && campaign && (
+        <DayEditorModal
+          ymd={editorYmd}
+          existingAssignment={editorAssignment}
+          campaign={campaign}
+          onClose={closeEditor}
+          onSaved={handleSaved}
           onStartSession={handleStartSession}
-          onToggleCondition={handleToggleCondition}
         />
       )}
 

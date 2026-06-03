@@ -390,12 +390,15 @@ html, body {
 }
 .cal-day:hover:not(.empty):not(.today) { border-color: var(--cyan); color: var(--text); }
 .cal-day.today { background: var(--cyan); color: #06131d; font-weight: 800; border-color: var(--cyan); }
-.cal-day.shoot { border-color: var(--green); color: var(--green); }
+.cal-day.shoot    { border-color: var(--green); color: var(--green); }
 .cal-day.tentpole { border-color: var(--cyan); color: var(--cyan); font-weight: 800; }
-.cal-day.edit { border-color: var(--muted); color: var(--muted); }
-.cal-day.publish { border-color: var(--green); color: var(--green); }
-.cal-day.past { opacity: 0.45; }
-.cal-day.empty { border-color: transparent; cursor: default; }
+.cal-day.edit     { border-color: var(--muted); color: var(--muted); }
+.cal-day.publish  { border-color: #c8ff57; color: #c8ff57; }
+.cal-day.outreach { border-color: #ffb347; color: #ffb347; }
+.cal-day.recovery { border-color: #4a5568; color: var(--muted); }
+.cal-day.off      { border-color: #2e4768; color: #3d5a75; }
+.cal-day.past     { opacity: 0.45; }
+.cal-day.empty    { border-color: transparent; cursor: default; }
 
 /* ── Day Card (week list) ── */
 .day-card {
@@ -431,10 +434,13 @@ html, body {
   margin-bottom: 3px;
   color: var(--cyan);
 }
-.day-type-label.shoot { color: var(--green); }
+.day-type-label.shoot    { color: var(--green); }
 .day-type-label.tentpole { color: var(--cyan); }
-.day-type-label.edit { color: var(--muted); }
-.day-type-label.publish { color: var(--green); }
+.day-type-label.edit     { color: var(--muted); }
+.day-type-label.publish  { color: #c8ff57; }
+.day-type-label.outreach { color: #ffb347; }
+.day-type-label.recovery { color: var(--muted); }
+.day-type-label.off      { color: #3d5a75; }
 .day-card-title {
   font-size: 13px;
   font-weight: 800;
