@@ -159,6 +159,12 @@ html, body {
 }
 
 /* ── Arc Slot ── */
+/* chip.green variant for active session badge */
+.chip.green {
+  background: var(--green);
+  color: #081300;
+}
+
 .arc-slot {
   border: 2px solid var(--line);
   background: var(--panel2);
@@ -589,3 +595,41 @@ html, body {
   display: block;
   margin-top: 2px;
 }
+
+/* ── Bottom Nav (global — 5 tabs: ARC/OPS/CAL/FIELD/LOG) ── */
+.bottom-nav {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: calc(70px + var(--safe-bottom));
+  background: var(--dark);
+  border-top: 3px solid var(--cyan);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  z-index: 100;
+}
+.nav-tab {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-right: 1px solid #1d2c40;
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: 0.05em;
+  padding-bottom: var(--safe-bottom);
+  font-family: 'Oxanium', sans-serif;
+}
+.nav-tab:last-child { border-right: 0; }
+.nav-tab.active {
+  background: var(--cyan);
+  color: #06131d;
+}
+
+/* ── Sys-input standalone (used without sys-textarea paired) ── */
+.sys-input {
+  display: block;
+  margin-bottom: 2px;
+}
+

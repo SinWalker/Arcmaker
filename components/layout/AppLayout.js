@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 
+// Nav tabs per mock and requirements: ARC / OPS / CAL / FIELD / LOG
+// TODAY is the post-login landing page but NOT a nav tab.
+// Users can always return to TODAY from any screen's contextual buttons.
 const NAV = [
   { href: '/arc',   label: 'ARC' },
   { href: '/ops',   label: 'OPS' },
@@ -30,9 +33,13 @@ export default function AppLayout({ children, sysLabel, pageTitle }) {
         {NAV.map(({ href, label }) => {
           const active =
             router.pathname === href ||
-            router.pathname.startsWith(href + '/');
+            (href !== '/' && router.pathname.startsWith(href + '/'));
           return (
-            <Link key={href} href={href} className={`nav-tab${active ? ' active' : ''}`}>
+            <Link
+              key={href}
+              href={href}
+              className={`nav-tab${active ? ' active' : ''}`}
+            >
               {label}
             </Link>
           );

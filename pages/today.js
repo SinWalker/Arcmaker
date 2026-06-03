@@ -1,8 +1,3 @@
-// Legacy redirect → /cal (TODAY is inside CAL day view)
-import { useEffect } from 'react';
-import { useRouter } from 'next/router';
-export default function TodayRedirect() {
-  const router = useRouter();
-  useEffect(() => { router.replace('/cal'); }, []);
-  return null;
-}
+import dynamic from 'next/dynamic';
+const TodayUI = dynamic(() => import('../components/today/TodayUI'), { ssr: false });
+export default function TodayPage() { return <TodayUI />; }

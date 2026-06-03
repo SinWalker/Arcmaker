@@ -21,7 +21,7 @@ export default function Home() {
       // PIN session check — sessionStorage clears on tab close
       const authed = sessionStorage.getItem('arcmaker_authed');
       if (authed === '1') {
-        router.replace('/arc');
+        router.replace('/today');
       } else {
         router.replace('/pin');
       }

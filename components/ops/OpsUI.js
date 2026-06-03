@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/router';
 import AppLayout from '../layout/AppLayout';
 import { getActiveCampaign, updateCampaign } from '../../lib/campaign';
 
 // Editable OPS fields — campaign dossier
 // OPS reads the active campaign. No campaignId in URL.
+// Bottom nav provides global navigation. OPEN TODAY button at bottom.
 
 const SAVE_STATUS_CONFIG = {
   saved:   { label: 'SAVED', color: 'var(--green)' },
@@ -22,6 +24,7 @@ function OpsField({ label, children }) {
 }
 
 export default function OpsUI() {
+  const router = useRouter();
   const [campaign, setCampaign] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState('saved');
@@ -242,6 +245,15 @@ export default function OpsUI() {
 
         </div>
       </div>
+
+      {/* OPEN TODAY — not a dead end */}
+      <button
+        className="cta-btn ghost"
+        style={{ marginBottom: 8 }}
+        onClick={() => router.push('/today')}
+      >
+        ← OPEN TODAY
+      </button>
 
     </AppLayout>
   );
