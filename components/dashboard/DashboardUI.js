@@ -49,8 +49,8 @@ export default function DashboardUI() {
         <div className="empty-state">
           <span className="emoji">👤</span>
           <p>No profile yet. Set one up first.</p>
-          <button className="btn btn-gold" style={{ marginTop: 16 }} onClick={() => router.push('/foundation')}>
-            Go to Setup
+          <button className="btn btn-gold" style={{ marginTop: 16 }} onClick={() => router.push('/onboarding')}>
+            Set Up Profile
           </button>
         </div>
       </AppLayout>
